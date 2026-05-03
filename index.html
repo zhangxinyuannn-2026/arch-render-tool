@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ArchRender — Zone-Based Prompt Engineer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink: #1A1714;
+      --stone: #6B6560;
+      --mist: #A8A49F;
+      --sand: #F2EDE4;
+      --paper: #FAF8F4;
+      --white: #FFFFFF;
+      --accent: #2D4A3E;
+      --accent-light: #EAF0ED;
+      --warm: #8B6914;
+      --warm-light: #FBF4E3;
+      --border: rgba(26,23,20,0.10);
+      --border-med: rgba(26,23,20,0.18);
+      --danger: #8B2020;
+      --danger-light: #FBEAEA;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── TOP NAV ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+      height: 56px;
+      background: var(--white);
+      border-bottom: 0.5px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      font-family: 'DM Serif Display', serif;
+      font-size: 20px;
+      letter-spacing: -0.3px;
+      color: var(--ink);
+    }
+    .logo span { color: var(--accent); }
+    .nav-tag {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--stone);
+    }
+    .api-badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    /* ── LAYOUT ── */
+    .workspace {
+      display: grid;
+      grid-template-columns: 320px 1fr 300px;
+      grid-template-rows: 1fr;
+      height: calc(100vh - 56px);
+      overflow: hidden;
+    }
+
+    /* ── PANELS ── */
+    .panel {
+      background: var(--white);
+      border-right: 0.5px solid var(--border);
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .panel-right {
+      border-right: none;
+      border-left: 0.5px solid var(--border);
+    }
+
+    .panel-section { display: flex; flex-direction: column; gap: 10px; }
+    .panel-title {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--mist);
+      padding-bottom: 8px;
+      border-bottom: 0.5px solid var(--border);
+    }
+
+    /* ── STEPS ── */
+    .step-indicator {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .step-dot {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border-med);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--mist);
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .step-dot.active { background: var(--accent); border-color: var(--accent); color: white; }
+    .step-dot.done { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+    .step-line { flex: 1; height: 0.5px; background: var(--border); }
+
+    /* ── UPLOAD ZONE ── */
+    .upload-zone {
+      border: 1.5px dashed var(--border-med);
+      border-radius: 10px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--paper);
+    }
+    .upload-zone:hover { border-color: var(--accent); background: var(--accent-light); }
+    .upload-zone.dragover { border-color: var(--accent); background: var(--accent-light); }
+    .upload-icon {
+      width: 36px;
+      height: 36px;
+      margin: 0 auto 10px;
+      border: 1.5px solid var(--border-med);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--stone);
+    }
+    .upload-label { font-size: 13px; color: var(--stone); line-height: 1.6; }
+    .upload-label strong { color: var(--ink); font-weight: 500; }
+
+    /* ── ZONES LIST ── */
+    .zones-list { display: flex; flex-direction: column; gap: 6px; }
+    .zone-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 0.5px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: var(--paper);
+    }
+    .zone-item:hover { border-color: var(--accent); background: var(--accent-light); }
+    .zone-item.selected { border-color: var(--accent); background: var(--accent-light); }
+    .zone-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      border: 0.5px solid rgba(0,0,0,0.15);
+    }
+    .zone-name { font-size: 13px; font-weight: 500; flex: 1; }
+    .zone-sub { font-size: 11px; color: var(--stone); }
+    .zone-count {
+      font-size: 10px;
+      color: var(--accent);
+      background: var(--accent-light);
+      padding: 2px 7px;
+      border-radius: 10px;
+    }
+    .zone-delete {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      color: var(--mist);
+      cursor: pointer;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .zone-delete:hover { color: var(--danger); background: var(--danger-light); }
+
+    /* ── CANVAS AREA ── */
+    .canvas-area {
+      background: #E8E4DC;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .canvas-wrapper {
+      position: relative;
+      cursor: crosshair;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+    }
+    #base-image {
+      display: block;
+      max-width: 100%;
+      max-height: calc(100vh - 140px);
+      user-select: none;
+    }
+    #zone-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    #draw-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .canvas-empty {
+      text-align: center;
+      color: var(--stone);
+    }
+    .canvas-empty svg { opacity: 0.3; margin-bottom: 12px; }
+    .canvas-empty p { font-size: 14px; }
+    .canvas-empty small { font-size: 12px; color: var(--mist); }
+
+    /* ── TOOLBAR ── */
+    .toolbar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      background: var(--white);
+      border: 0.5px solid var(--border-med);
+      border-radius: 10px;
+      padding: 6px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+    }
+    .tool-btn {
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'DM Sans', sans-serif;
+      border: 0.5px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--stone);
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tool-btn:hover { background: var(--sand); color: var(--ink); }
+    .tool-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .tool-btn svg { width: 14px; height: 14px; }
+    .tool-divider { width: 0.5px; background: var(--border); margin: 4px 2px; }
+
+    /* ── SIZE SLIDER ── */
+    .brush-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+    }
+    .brush-wrap label { font-size: 11px; color: var(--stone); }
+    .brush-wrap input { width: 60px; accent-color: var(--accent); }
+
+    /* ── RIGHT PANEL: Material Config ── */
+    .material-config { display: flex; flex-direction: column; gap: 14px; }
+    .field-label { font-size: 11px; color: var(--stone); margin-bottom: 4px; font-weight: 500; }
+
+    .chips-wrap { display: flex; flex-wrap: wrap; gap: 5px; }
+    .chip {
+      padding: 5px 11px;
+      font-size: 12px;
+      font-family: 'DM Sans', sans-serif;
+      border: 0.5px solid var(--border-med);
+      border-radius: 16px;
+      background: var(--paper);
+      color: var(--ink);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--accent); }
+    .chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .chip.warm-active { background: var(--warm); color: white; border-color: var(--warm); }
+
+    select, input[type="text"], textarea {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: 'DM Sans', sans-serif;
+      border: 0.5px solid var(--border-med);
+      border-radius: 7px;
+      background: var(--paper);
+      color: var(--ink);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    select:focus, input[type="text"]:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+    textarea { resize: vertical; min-height: 60px; line-height: 1.6; }
+
+    /* ── GENERATE SECTION ── */
+    .generate-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 4px;
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: 'DM Sans', sans-serif;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-secondary {
+      width: 100%;
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'DM Sans', sans-serif;
+      background: transparent;
+      color: var(--stone);
+      border: 0.5px solid var(--border-med);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-secondary:hover { color: var(--ink); border-color: var(--accent); }
+
+    /* ── OUTPUT ── */
+    .output-tabs {
+      display: flex;
+      border-bottom: 0.5px solid var(--border);
+      margin: 0 -20px;
+      padding: 0 20px;
+    }
+    .otab {
+      padding: 8px 0;
+      margin-right: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--mist);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .otab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .output-text {
+      font-size: 12px;
+      line-height: 1.8;
+      color: var(--ink);
+      background: var(--paper);
+      border: 0.5px solid var(--border);
+      border-radius: 7px;
+      padding: 12px;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .copy-btn {
+      padding: 7px 14px;
+      font-size: 11px;
+      font-family: 'DM Sans', sans-serif;
+      border: 0.5px solid var(--border-med);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--stone);
+      cursor: pointer;
+      transition: all 0.15s;
+      align-self: flex-start;
+    }
+    .copy-btn:hover { color: var(--ink); border-color: var(--accent); }
+
+    .loading-dots {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      padding: 12px;
+      color: var(--stone);
+      font-size: 12px;
+    }
+    .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: blink 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+
+    /* ── API KEY MODAL ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(26,23,20,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: var(--white);
+      border-radius: 14px;
+      padding: 28px;
+      width: 400px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .modal h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 20px;
+      font-weight: 400;
+      margin-bottom: 8px;
+    }
+    .modal p { font-size: 13px; color: var(--stone); line-height: 1.6; margin-bottom: 16px; }
+    .modal a { color: var(--accent); text-decoration: none; }
+    .modal input {
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* ── ZONE COLOR LEGEND ── */
+    .zone-colors-info {
+      font-size: 11px;
+      color: var(--stone);
+      line-height: 1.8;
+      padding: 10px;
+      background: var(--paper);
+      border-radius: 7px;
+      border: 0.5px solid var(--border);
+    }
+
+    /* ── SUMMARY BAR ── */
+    .summary-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .summary-pill {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 12px;
+      background: var(--sand);
+      color: var(--stone);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .summary-pill span { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-med); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- API KEY MODAL -->
+<div class="modal-overlay" id="api-modal">
+  <div class="modal">
+    <h2>Enter your API Key</h2>
+    <p>You need an Anthropic API key to generate prompts. Get one free at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>. Your key is stored only in your browser.</p>
+    <input type="text" id="api-key-input" placeholder="sk-ant-..." />
+    <div class="modal-actions">
+      <button class="btn-secondary" style="width:auto;padding:9px 18px" onclick="saveKey()">Save & Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Arch<span>Render</span></div>
+  <div class="nav-tag">Zone-Based Prompt Engineer</div>
+  <div class="api-badge" onclick="showKeyModal()">⚙ API Key</div>
+</nav>
+
+<!-- WORKSPACE -->
+<div class="workspace">
+
+  <!-- LEFT PANEL -->
+  <div class="panel">
+
+    <!-- Steps -->
+    <div class="panel-section">
+      <div class="panel-title">Workflow</div>
+      <div class="step-indicator">
+        <div class="step-dot active" id="step1">1</div>
+        <div class="step-line"></div>
+        <div class="step-dot" id="step2">2</div>
+        <div class="step-line"></div>
+        <div class="step-dot" id="step3">3</div>
+        <div class="step-line"></div>
+        <div class="step-dot" id="step4">4</div>
+      </div>
+      <div style="font-size:12px;color:var(--stone);line-height:1.7">
+        <strong style="color:var(--ink);font-size:13px" id="step-title">Step 1 — Upload Base Image</strong><br>
+        <span id="step-desc">Upload your Rhino screenshot or floor plan as the composition canvas</span>
+      </div>
+    </div>
+
+    <!-- Upload -->
+    <div class="panel-section" id="upload-section">
+      <div class="panel-title">Base Image</div>
+      <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18">
+            <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12M8 8l4-4 4 4"/>
+          </svg>
+        </div>
+        <div class="upload-label">
+          <strong>Click to upload</strong> or drag & drop<br>
+          Rhino screenshot, sketch, or wireframe
+        </div>
+      </div>
+      <input type="file" id="file-input" accept="image/*" style="display:none" onchange="loadImage(event)" />
+    </div>
+
+    <!-- Zone Tools -->
+    <div class="panel-section" id="zone-section" style="display:none">
+      <div class="panel-title">Paint Zones</div>
+      <div class="zone-colors-info">
+        Select a zone type below, then paint over your image to mark that area.
+      </div>
+      <div class="zones-list" id="zones-palette">
+        <!-- populated by JS -->
+      </div>
+      <button class="btn-secondary" onclick="addCustomZone()">+ Add custom zone</button>
+    </div>
+
+    <!-- Active Zones -->
+    <div class="panel-section" id="active-zones-section" style="display:none">
+      <div class="panel-title">Marked Zones</div>
+      <div class="zones-list" id="active-zones-list"></div>
+    </div>
+
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-area" id="canvas-area">
+    <div class="canvas-empty" id="canvas-empty">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="8" y="8" width="48" height="48" rx="4" stroke="#1A1714" stroke-width="1.5"/>
+        <path d="M8 44l14-14 10 10 8-12 14 12" stroke="#1A1714" stroke-width="1.5" stroke-linejoin="round"/>
+        <circle cx="20" cy="24" r="4" stroke="#1A1714" stroke-width="1.5"/>
+      </svg>
+      <p>Upload a base image to begin</p>
+      <small>Your Rhino screenshot becomes the composition canvas</small>
+    </div>
+
+    <div class="canvas-wrapper" id="canvas-wrapper" style="display:none">
+      <img id="base-image" alt="Base image" draggable="false" />
+      <canvas id="zone-canvas"></canvas>
+      <canvas id="draw-canvas"></canvas>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar" id="toolbar" style="display:none">
+      <button class="tool-btn active" id="tool-paint" onclick="setTool('paint')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><circle cx="12" cy="12" r="1"/></svg>
+        Paint
+      </button>
+      <button class="tool-btn" id="tool-erase" onclick="setTool('erase')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 7 7-2.5 2.5"/><path d="M6.5 17.5l10-10"/></svg>
+        Erase
+      </button>
+      <div class="tool-divider"></div>
+      <div class="brush-wrap">
+        <label>Size</label>
+        <input type="range" min="10" max="80" value="30" id="brush-size" oninput="brushSize=parseInt(this.value)">
+      </div>
+      <div class="tool-divider"></div>
+      <button class="tool-btn" onclick="clearZone()">Clear Zone</button>
+      <button class="tool-btn" onclick="clearAll()" style="color:var(--danger)">Clear All</button>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel panel-right">
+
+    <!-- Selected zone config -->
+    <div class="panel-section">
+      <div class="panel-title">Zone Properties</div>
+      <div id="no-zone-msg" style="font-size:12px;color:var(--mist);padding:8px 0">
+        Select a zone from the left panel, then paint it on the canvas.
+      </div>
+      <div class="material-config" id="zone-config" style="display:none">
+
+        <div>
+          <div class="field-label">Surface Type</div>
+          <div class="chips-wrap" id="surface-chips">
+            <div class="chip" onclick="toggleChip(this,'surface')">Floor</div>
+            <div class="chip" onclick="toggleChip(this,'surface')">Wall</div>
+            <div class="chip" onclick="toggleChip(this,'surface')">Ceiling</div>
+            <div class="chip" onclick="toggleChip(this,'surface')">Facade</div>
+            <div class="chip" onclick="toggleChip(this,'surface')">Roof</div>
+            <div class="chip" onclick="toggleChip(this,'surface')">Column</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="field-label">Material Family</div>
+          <select id="mat-family" onchange="updateMatOptions()">
+            <option value="">Select material...</option>
+            <option value="concrete">Concrete</option>
+            <option value="timber">Timber / Wood</option>
+            <option value="steel">Steel / Metal</option>
+            <option value="glass">Glass</option>
+            <option value="brick">Brick / Masonry</option>
+            <option value="stone">Stone / Marble</option>
+            <option value="plaster">Plaster / Render</option>
+            <option value="earth">Rammed Earth / Adobe</option>
+            <option value="fabric">Fabric / Textile</option>
+            <option value="tile">Tile / Ceramic</option>
+          </select>
+        </div>
+
+        <div>
+          <div class="field-label">Texture & Finish</div>
+          <div class="chips-wrap" id="texture-chips">
+            <div class="chip" onclick="toggleChip(this,'texture')">Smooth</div>
+            <div class="chip" onclick="toggleChip(this,'texture')">Rough</div>
+            <div class="chip" onclick="toggleChip(this,'texture')">Polished</div>
+            <div class="chip" onclick="toggleChip(this,'texture')">Weathered</div>
+            <div class="chip" onclick="toggleChip(this,'texture')">Brushed</div>
+            <div class="chip" onclick="toggleChip(this,'texture')">Raw</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="field-label">Colour Tone</div>
+          <div class="chips-wrap">
+            <div class="chip" onclick="toggleChip(this,'tone')">Warm white</div>
+            <div class="chip" onclick="toggleChip(this,'tone')">Charcoal</div>
+            <div class="chip" onclick="toggleChip(this,'tone')">Natural</div>
+            <div class="chip" onclick="toggleChip(this,'tone')">Terracotta</div>
+            <div class="chip" onclick="toggleChip(this,'tone')">Sage green</div>
+            <div class="chip" onclick="toggleChip(this,'tone')">Dark walnut</div>
+            <div class="chip" onclick="toggleChip(this,'tone')">Light oak</div>
+            <div class="chip" onclick="toggleChip(this,'tone')">Steel grey</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="field-label">Zone notes (optional)</div>
+          <textarea id="zone-notes" placeholder="e.g. vertical grain, board-formed, exposed aggregate..."></textarea>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div style="height:0.5px;background:var(--border)"></div>
+
+    <!-- Global settings -->
+    <div class="panel-section">
+      <div class="panel-title">Scene Settings</div>
+
+      <div>
+        <div class="field-label">Lighting</div>
+        <div class="chips-wrap">
+          <div class="chip" onclick="toggleGlobal(this,'light')">Golden hour</div>
+          <div class="chip" onclick="toggleGlobal(this,'light')">Overcast</div>
+          <div class="chip" onclick="toggleGlobal(this,'light')">Dramatic sunset</div>
+          <div class="chip" onclick="toggleGlobal(this,'light')">Night artificial</div>
+          <div class="chip" onclick="toggleGlobal(this,'light')">Blue hour</div>
+          <div class="chip" onclick="toggleGlobal(this,'light')">Diffuse studio</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">Atmosphere</div>
+        <div class="chips-wrap">
+          <div class="chip" onclick="toggleGlobal(this,'atmo')">Clear sky</div>
+          <div class="chip" onclick="toggleGlobal(this,'atmo')">Misty</div>
+          <div class="chip" onclick="toggleGlobal(this,'atmo')">Rainy</div>
+          <div class="chip" onclick="toggleGlobal(this,'atmo')">Dramatic clouds</div>
+          <div class="chip" onclick="toggleGlobal(this,'atmo')">Snow</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">People & Scale</div>
+        <div class="chips-wrap">
+          <div class="chip" onclick="toggleGlobal(this,'people')">No people</div>
+          <div class="chip" onclick="toggleGlobal(this,'people')">Silhouettes</div>
+          <div class="chip" onclick="toggleGlobal(this,'people')">Casual pedestrians</div>
+          <div class="chip" onclick="toggleGlobal(this,'people')">Business figures</div>
+          <div class="chip" onclick="toggleGlobal(this,'people')">Blurred figures</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">Rendering Engine</div>
+        <select id="engine-select">
+          <option value="midjourney">Midjourney</option>
+          <option value="dalle">DALL·E 3</option>
+          <option value="stable_diffusion">Stable Diffusion</option>
+          <option value="vray">V-Ray (prompt guide)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Generate -->
+    <div class="panel-section generate-section">
+      <div class="panel-title">Generate</div>
+
+      <div class="summary-bar" id="summary-bar"></div>
+
+      <button class="btn-primary" id="gen-btn" onclick="generatePrompt()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Generate Precise Prompt
+      </button>
+
+      <div id="output-section" style="display:none;flex-direction:column;gap:10px">
+        <div class="output-tabs">
+          <button class="otab active" onclick="switchOTab(this,'main-out')">Main Prompt</button>
+          <button class="otab" onclick="switchOTab(this,'neg-out')">Negative</button>
+          <button class="otab" onclick="switchOTab(this,'tips-out')">Tips</button>
+        </div>
+        <div id="loading-indicator" class="loading-dots">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <span style="margin-left:4px">Assembling prompt…</span>
+        </div>
+        <div id="main-out" class="output-text" style="display:none"></div>
+        <div id="neg-out" class="output-text" style="display:none"></div>
+        <div id="tips-out" class="output-text" style="display:none"></div>
+        <button class="copy-btn" id="copy-btn" style="display:none" onclick="copyOutput()">Copy prompt</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+let apiKey = localStorage.getItem('arch_api_key') || '';
+let currentTool = 'paint';
+let currentZone = null;
+let brushSize = 30;
+let isDrawing = false;
+let imageLoaded = false;
+
+const zoneConfigs = {};
+const globalSettings = { light: null, atmo: null, people: null };
+
+// Default zone palette
+const zonePalette = [
+  { id: 'wall', name: 'Wall', color: 'rgba(100,149,237,0.55)' },
+  { id: 'floor', name: 'Floor', color: 'rgba(139,90,43,0.55)' },
+  { id: 'ceiling', name: 'Ceiling', color: 'rgba(180,180,100,0.55)' },
+  { id: 'window', name: 'Window / Glass', color: 'rgba(100,200,220,0.55)' },
+  { id: 'facade', name: 'Facade', color: 'rgba(200,100,100,0.55)' },
+  { id: 'furniture', name: 'Furniture', color: 'rgba(150,100,200,0.55)' },
+  { id: 'landscape', name: 'Landscape', color: 'rgba(80,160,80,0.55)' },
+];
+
+// Canvas refs
+let drawCanvas, zoneCanvas, drawCtx, zoneCtx, imgEl;
+
+// ── INIT ──
+window.onload = () => {
+  if (!apiKey) showKeyModal();
+  renderZonePalette();
+  setupDragDrop();
+};
+
+function showKeyModal() { document.getElementById('api-modal').classList.remove('hidden'); }
+function hideKeyModal() { document.getElementById('api-modal').classList.add('hidden'); }
+function saveKey() {
+  const k = document.getElementById('api-key-input').value.trim();
+  if (k) { apiKey = k; localStorage.setItem('arch_api_key', k); }
+  hideKeyModal();
+}
+
+// ── ZONE PALETTE ──
+function renderZonePalette() {
+  const list = document.getElementById('zones-palette');
+  list.innerHTML = '';
+  zonePalette.forEach(z => {
+    const el = document.createElement('div');
+    el.className = 'zone-item';
+    el.dataset.zoneId = z.id;
+    el.onclick = () => selectZone(z.id);
+    el.innerHTML = `
+      <div class="zone-swatch" style="background:${z.color}"></div>
+      <div style="flex:1">
+        <div class="zone-name">${z.name}</div>
+      </div>
+    `;
+    list.appendChild(el);
+  });
+}
+
+function selectZone(id) {
+  currentZone = id;
+  document.querySelectorAll('.zone-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.zoneId === id);
+  });
+  // Show config
+  document.getElementById('no-zone-msg').style.display = 'none';
+  document.getElementById('zone-config').style.display = 'flex';
+  // Load saved config for this zone
+  loadZoneConfig(id);
+  updateStepIndicator(2);
+}
+
+function loadZoneConfig(id) {
+  const cfg = zoneConfigs[id] || {};
+  // Reset chips
+  document.querySelectorAll('#zone-config .chip').forEach(c => c.classList.remove('active'));
+  // Restore selections
+  if (cfg.surface) setChipActive('surface-chips', cfg.surface);
+  if (cfg.texture) setChipActive('texture-chips', cfg.texture);
+  document.getElementById('mat-family').value = cfg.material || '';
+  document.getElementById('zone-notes').value = cfg.notes || '';
+}
+
+function setChipActive(containerId, val) {
+  document.querySelectorAll(`#${containerId} .chip`).forEach(c => {
+    if (c.textContent === val) c.classList.add('active');
+  });
+}
+
+function saveCurrentZoneConfig() {
+  if (!currentZone) return;
+  zoneConfigs[currentZone] = {
+    surface: getActiveChip('surface-chips'),
+    texture: getActiveChip('texture-chips'),
+    tone: getActiveChip('tone-chips') || '',
+    material: document.getElementById('mat-family').value,
+    notes: document.getElementById('zone-notes').value,
+  };
+}
+
+function getActiveChip(containerId) {
+  const el = document.querySelector(`#${containerId} .chip.active`);
+  return el ? el.textContent : null;
+}
+
+function toggleChip(el, group) {
+  const siblings = el.closest('.chips-wrap').querySelectorAll('.chip');
+  siblings.forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  saveCurrentZoneConfig();
+}
+
+function toggleGlobal(el, key) {
+  const siblings = el.closest('.chips-wrap').querySelectorAll('.chip');
+  siblings.forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  globalSettings[key] = el.textContent;
+  updateSummary();
+}
+
+function updateSummary() {
+  const bar = document.getElementById('summary-bar');
+  const items = Object.entries(globalSettings).filter(([,v]) => v);
+  bar.innerHTML = items.map(([k,v]) => `<div class="summary-pill">${v}</div>`).join('');
+}
+
+// ── IMAGE LOADING ──
+function loadImage(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => initCanvas(ev.target.result);
+  reader.readAsDataURL(file);
+}
+
+function setupDragDrop() {
+  const dz = document.getElementById('drop-zone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = ev => initCanvas(ev.target.result);
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
+function initCanvas(src) {
+  document.getElementById('canvas-empty').style.display = 'none';
+  const wrapper = document.getElementById('canvas-wrapper');
+  wrapper.style.display = 'block';
+  imgEl = document.getElementById('base-image');
+  imgEl.src = src;
+  imgEl.onload = () => {
+    const w = imgEl.naturalWidth;
+    const h = imgEl.naturalHeight;
+    // Set canvases to same size as image
+    drawCanvas = document.getElementById('draw-canvas');
+    zoneCanvas = document.getElementById('zone-canvas');
+    drawCanvas.width = imgEl.offsetWidth;
+    drawCanvas.height = imgEl.offsetHeight;
+    zoneCanvas.width = imgEl.offsetWidth;
+    zoneCanvas.height = imgEl.offsetHeight;
+    drawCtx = drawCanvas.getContext('2d');
+    zoneCtx = zoneCanvas.getContext('2d');
+    setupDrawing();
+    document.getElementById('toolbar').style.display = 'flex';
+    document.getElementById('zone-section').style.display = 'flex';
+    document.getElementById('active-zones-section').style.display = 'flex';
+    imageLoaded = true;
+    updateStepIndicator(2);
+  };
+}
+
+// ── DRAWING ──
+function setTool(t) {
+  currentTool = t;
+  document.querySelectorAll('.tool-btn[id^=tool-]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('tool-' + t);
+  if (btn) btn.classList.add('active');
+}
+
+function setupDrawing() {
+  drawCanvas.addEventListener('mousedown', startDraw);
+  drawCanvas.addEventListener('mousemove', draw);
+  drawCanvas.addEventListener('mouseup', stopDraw);
+  drawCanvas.addEventListener('mouseleave', stopDraw);
+  // Touch support
+  drawCanvas.addEventListener('touchstart', e => { e.preventDefault(); startDraw(e.touches[0]); }, { passive: false });
+  drawCanvas.addEventListener('touchmove', e => { e.preventDefault(); draw(e.touches[0]); }, { passive: false });
+  drawCanvas.addEventListener('touchend', stopDraw);
+}
+
+function getPos(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (drawCanvas.width / rect.width),
+    y: (e.clientY - rect.top) * (drawCanvas.height / rect.height),
+  };
+}
+
+function startDraw(e) {
+  if (!currentZone && currentTool === 'paint') return;
+  isDrawing = true;
+  const pos = getPos(e);
+  drawCtx.beginPath();
+  drawCtx.moveTo(pos.x, pos.y);
+  paintAt(pos.x, pos.y);
+}
+
+function draw(e) {
+  if (!isDrawing) return;
+  const pos = getPos(e);
+  paintAt(pos.x, pos.y);
+}
+
+function stopDraw() {
+  if (isDrawing) {
+    isDrawing = false;
+    flattenToZoneCanvas();
+    updateActiveZonesList();
+    updateStepIndicator(3);
+  }
+}
+
+function paintAt(x, y) {
+  const zone = zonePalette.find(z => z.id === currentZone);
+  if (currentTool === 'paint' && zone) {
+    drawCtx.globalCompositeOperation = 'source-over';
+    drawCtx.fillStyle = zone.color;
+    drawCtx.beginPath();
+    drawCtx.arc(x, y, brushSize, 0, Math.PI * 2);
+    drawCtx.fill();
+  } else if (currentTool === 'erase') {
+    drawCtx.globalCompositeOperation = 'destination-out';
+    drawCtx.beginPath();
+    drawCtx.arc(x, y, brushSize, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.globalCompositeOperation = 'source-over';
+  }
+}
+
+function flattenToZoneCanvas() {
+  zoneCtx.clearRect(0, 0, zoneCanvas.width, zoneCanvas.height);
+  zoneCtx.drawImage(drawCanvas, 0, 0);
+}
+
+function clearZone() {
+  if (!currentZone) return;
+  // Remove pixels of current zone color (simplified: clear all and redraw others)
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  flattenToZoneCanvas();
+}
+
+function clearAll() {
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  zoneCtx.clearRect(0, 0, zoneCanvas.width, zoneCanvas.height);
+  updateActiveZonesList();
+}
+
+function updateActiveZonesList() {
+  const list = document.getElementById('active-zones-list');
+  list.innerHTML = '';
+  zonePalette.forEach(z => {
+    const el = document.createElement('div');
+    el.className = 'zone-item';
+    el.dataset.zoneId = z.id;
+    el.onclick = () => selectZone(z.id);
+    const cfg = zoneConfigs[z.id];
+    const subtitle = cfg ? [cfg.material, cfg.texture].filter(Boolean).join(', ') : 'No material set';
+    el.innerHTML = `
+      <div class="zone-swatch" style="background:${z.color}"></div>
+      <div style="flex:1">
+        <div class="zone-name">${z.name}</div>
+        <div class="zone-sub">${subtitle}</div>
+      </div>
+    `;
+    list.appendChild(el);
+  });
+}
+
+function addCustomZone() {
+  const name = prompt('Zone name:');
+  if (!name) return;
+  const colors = ['rgba(255,165,0,0.55)','rgba(128,0,128,0.55)','rgba(255,20,147,0.55)'];
+  const color = colors[zonePalette.length % colors.length];
+  const id = name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+  zonePalette.push({ id, name, color });
+  renderZonePalette();
+}
+
+// ── STEP INDICATOR ──
+function updateStepIndicator(step) {
+  const titles = ['', 'Upload Base Image', 'Select & Paint Zones', 'Set Materials', 'Generate Prompt'];
+  const descs = ['', 'Upload your Rhino screenshot or floor plan', 'Paint each zone on the canvas', 'Assign materials and finishes to each zone', 'Generate your optimised rendering prompt'];
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('step' + i);
+    el.classList.remove('active', 'done');
+    if (i < step) el.classList.add('done');
+    else if (i === step) el.classList.add('active');
+  }
+  document.getElementById('step-title').textContent = 'Step ' + step + ' — ' + titles[step];
+  document.getElementById('step-desc').textContent = descs[step];
+}
+
+// ── GENERATE ──
+async function generatePrompt() {
+  if (!apiKey) { showKeyModal(); return; }
+
+  const engine = document.getElementById('engine-select').value;
+  const engineNames = { midjourney: 'Midjourney', dalle: 'DALL·E 3', stable_diffusion: 'Stable Diffusion', vray: 'V-Ray (prompt guide)' };
+
+  // Build zone descriptions
+  const zoneDescs = zonePalette.map(z => {
+    const cfg = zoneConfigs[z.id];
+    if (!cfg || (!cfg.material && !cfg.surface)) return null;
+    return `${z.name}: ${[cfg.surface, cfg.material, cfg.texture, cfg.tone, cfg.notes].filter(Boolean).join(', ')}`;
+  }).filter(Boolean);
+
+  const systemPrompt = `You are an expert architectural visualisation and rendering prompt engineer. You create highly controlled, zone-specific prompts for AI rendering tools. Your prompts describe precise material treatments per architectural element, maintaining the spatial composition of a reference image. You never randomly change composition — only materialise specific zones.
+
+Respond ONLY with a JSON object (no markdown, no backticks):
+{
+  "prompt": "The detailed zone-by-zone rendering prompt",
+  "negative": "Terms to exclude, comma separated",
+  "tips": "3-5 specific workflow tips for this engine"
+}`;
+
+  const userMsg = `Generate a zone-based architectural rendering prompt for ${engineNames[engine]}.
+
+The user has a base architectural image (their Rhino/sketch composition) and has defined these specific zones with materials:
+
+${zoneDescs.length > 0 ? zoneDescs.join('\n') : 'No zones defined yet — generate a general high-quality architectural rendering prompt'}
+
+Global scene settings:
+- Lighting: ${globalSettings.light || 'Natural daylight'}
+- Atmosphere: ${globalSettings.atmo || 'Clear'}
+- People: ${globalSettings.people || 'No people'}
+
+Instructions:
+- The spatial composition MUST be preserved exactly from the base image
+- Each zone must be materialised PRECISELY as specified
+- Prompt should direct the renderer to keep geometry and layout unchanged
+- Use ${engineNames[engine]}'s specific syntax and parameter style
+- Be highly technical and precise, not generic`;
+
+  // UI
+  document.getElementById('output-section').style.display = 'flex';
+  document.getElementById('loading-indicator').style.display = 'flex';
+  document.getElementById('main-out').style.display = 'none';
+  document.getElementById('neg-out').style.display = 'none';
+  document.getElementById('tips-out').style.display = 'none';
+  document.getElementById('copy-btn').style.display = 'none';
+  document.getElementById('gen-btn').disabled = true;
+  updateStepIndicator(4);
+
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMsg }]
+      })
+    });
+
+    const rawText = await res.text();
+    let data;
+    try { data = JSON.parse(rawText); } catch(e) {
+      throw new Error('Server error: ' + rawText.slice(0, 300));
+    }
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    if (!data.content || !Array.isArray(data.content)) {
+      throw new Error('Unexpected API response: ' + JSON.stringify(data).slice(0, 300));
+    }
+
+    const text = data.content.map(i => i.text || '').join('');
+    const clean = text.replace(/```json|```/g, '').trim();
+
+    let parsed;
+    try { parsed = JSON.parse(clean); }
+    catch(e) { parsed = { prompt: text, negative: '', tips: '' }; }
+
+    document.getElementById('main-out').textContent = parsed.prompt || text;
+    document.getElementById('neg-out').textContent = parsed.negative || '';
+    document.getElementById('tips-out').textContent = parsed.tips || '';
+    document.getElementById('loading-indicator').style.display = 'none';
+    document.getElementById('main-out').style.display = 'block';
+    document.getElementById('copy-btn').style.display = 'inline-block';
+  } catch(e) {
+    document.getElementById('loading-indicator').style.display = 'none';
+    document.getElementById('main-out').style.display = 'block';
+    document.getElementById('main-out').textContent = 'Error: ' + e.message;
+  }
+  document.getElementById('gen-btn').disabled = false;
+}
+
+function switchOTab(el, panelId) {
+  document.querySelectorAll('.otab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['main-out','neg-out','tips-out'].forEach(id => {
+    const p = document.getElementById(id);
+    if (p) p.style.display = (id === panelId) ? 'block' : 'none';
+  });
+}
+
+function copyOutput() {
+  const text = document.getElementById('main-out').textContent;
+  navigator.clipboard.writeText(text);
+  const btn = document.getElementById('copy-btn');
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = 'Copy prompt', 1500);
+}
+
+function updateMatOptions() { saveCurrentZoneConfig(); }
+</script>
+</body>
+</html>
